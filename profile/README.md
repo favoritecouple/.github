@@ -8,8 +8,8 @@ Couples sign up as a pair, post their story and photos/videos, and compete in a 
 
 ## 📄 Documents
 
-- **[Business Model](./business-model.md)** — concept, users, competitions, voting mechanics, prizes, revenue streams, costs, growth engine, and launch plan.
-- **[Financial Model](./financial-model.md)** — driver assumptions, revenue and cost models, three scenarios, break-even, and an illustrative 12-month path.
+- **[Business Model](./favorite-couple-business-model.md)** — concept, users, competitions, voting mechanics, prizes, revenue streams, costs, growth engine, and launch plan.
+- **[Financial Model](./favorite-couple-financial-model.md)** — driver assumptions, revenue and cost models, three scenarios, break-even, and an illustrative 12-month path.
 
 ---
 
