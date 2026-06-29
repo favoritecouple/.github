@@ -1,33 +1,44 @@
-# Favorite Couple
+# Favorite
 
-> A social voting platform where couples share their story and compete to become their country's, region's, continent's, and the world's **favorite couple**.
+> A popularity-contest **platform** built as a reusable format: register a contestant, tell its story, collect free votes, climb a tiered popularity ladder — funded by sponsors and advertising. **Free to enter, free to win** — money never decides the outcome. Launching with pets and expanding vertical by vertical.
 
-Couples sign up as a pair, post their story and photos/videos, and compete in a tiered series of popularity competitions. Anyone can register as a voter to support a favorite couple, and winning couples earn real prizes. The platform grows through the couples themselves, who bring their own audiences.
+The same engine runs many verticals by swapping the contestant. It launches with **pets** (the easiest, most monetizable vertical) and expands to cars, gardens, and couples once the loop is proven. Voting is always free, a contestant can win on free votes alone, and finished competitions become permanent evergreen story pages that compound into organic search traffic.
 
 ---
 
-## 📄 Documents
+## Documents
 
-- **[Business Model](./favorite-couple-business-model.md)** — concept, users, competitions, voting mechanics, prizes, revenue streams, costs, growth engine, and launch plan.
-- **[Financial Model](./favorite-couple-financial-model.md)** — driver assumptions, revenue and cost models, three scenarios, break-even, and an illustrative 12-month path.
+- **[Business Model](./business-model.md)** — the format, vertical strategy and launch order, users, competitions, voting, prizes, revenue, subscriptions, SEO, the momentum loop, and legal posture.
+- **[Financial Model](./financial-model.md)** — per-vertical ad value, the pets MVP, portfolio-at-scale, the staged vertical ramp, break-even, and a 12-month path.
+- **[MVP Build Spec](./mvp-build-spec.md)** — technical spec for Claude Code: category-aware engine, data model, voting engine, payments, SEO pages, anti-fraud, Hetzner deployment, build order.
+- **[Rollout Playbook](./rollout-playbook.md)** — vertical-by-vertical rollout with the per-country launch loop nested inside: pre-reg, sponsor gate, referral-chain qualification, live competition, prize fulfilment, and the social plan.
 
 ---
 
 ## At a Glance
 
+**It's a format, not one app**
+- Register a contestant -> tell its story -> free daily votes -> tiered ladder -> sponsors + ads -> finished entries become permanent story pages.
+
+**Vertical launch order** (easiest/most monetizable first)
+1. **Pets — Dogs** and **Cats** (launch vertical; lightest legal load, deepest sponsors)
+2. **Cars / builds** (highest ad value, strongest SEO)
+3. **Gardens**
+4. **Couples** (last — lowest ad value, heaviest moderation)
+
 **Two user types**
-- **Voters** — register to vote, one free vote per competition per day, can buy extra votes. Pay money, cannot win the prize.
-- **Couples** — register as a pair, post and compete, can win prizes, cannot buy votes.
+- **Voters** — one free vote per competition per day, never pay.
+- **Contestants** — register and compete; entering and winning are free.
 
 **Competition ladder**
-- Country (monthly) → Regional (quarterly) → Continental (half-yearly) → Global (yearly), with the top 10 advancing automatically at each level.
+- Country (monthly) -> Regional (quarterly) -> Continental (half-yearly) -> Global (yearly), top 10 advancing automatically.
 
-**How prizes work**
-- A fixed amount the company announces *before* each round, funded from revenue and/or by sponsors — not a percentage of incoming payments.
+**Voting**
+- Free daily vote for everyone. Each contestant gets one free 24h 5x boost per competition. No paid votes, no paid boosts — **no payment affects the outcome.**
 
-**Revenue**
-- Paid votes · paid boosts · couple premium features · sponsor prize funding · sponsor logo/ad listings · display advertising.
+**Prizes & revenue**
+- Fixed, pre-announced prize funded by sponsor and/or company (in-kind -> gift cards -> travel -> cash). Revenue from sponsor funding, sponsor logo/ad listings, display advertising/AdSense, and contestant subscriptions.
 
 ---
 
-<sub>Documents reflect a structural business and financial model, not legal advice. Prize-competition and financial rules should be confirmed with a local specialist per country before operating.</sub>
+<sub>Documents reflect a structural business and technical model, not legal advice. The model is deliberately free-to-enter and free-to-win; prize-competition and advertising rules should still be confirmed with a local specialist per vertical and country before operating.</sub>

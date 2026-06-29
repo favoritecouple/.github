@@ -1,245 +1,250 @@
-# Favorite Couple — MVP Build Spec (for Claude Code)
+# Favorite — MVP Build Spec (for Claude Code)
 
-Build spec for the MVP. Scope is deliberately narrow: **one country, one monthly competition.** The tiered ladder (regional/continental/global) is explicitly out of scope for v1 but the data model is designed so it can be added later without a rewrite.
+Build spec for the MVP. **Launch vertical = Pets, run as two competitions: Dogs and Cats**, in one country, monthly. The engine is a **reusable format** (register a contestant -> story -> free votes -> tiered ladder -> sponsors/ads), so it must be **category-aware from day one**: a vertical (pets, cars, gardens, couples) is configuration, not a code fork. The tiered ladder and additional verticals are out of scope for v1 but the data model supports them. **Core principle: money is fully decoupled from the contest outcome.** No paid votes, no paid boosts — voters never pay, and no payment affects who wins.
+
+**Vertical roadmap (config, not rewrites):** Pets (Dogs + Cats) -> Cars -> Gardens -> Couples. Build the generic "contestant" model now; do not build later verticals until the pets loop is proven.
 
 ---
 
 ## 1. Stack & Conventions
 
-- **Framework:** Next.js (App Router, TypeScript, Server Components by default; Client Components only where interactivity is required).
-- **DB:** PostgreSQL. Use **Prisma** or **Drizzle** as the ORM (pick one and keep it consistent — Drizzle recommended for type-safety + SQL transparency).
-- **Cache / real-time / rate-limit:** Redis (counters, leaderboards via sorted sets, rate limiting, free-vote-per-day locks, background job queue).
-- **UI:** shadcn/ui + Tailwind. Keep components in `components/ui` (shadcn) and `components/` (app-specific).
-- **Auth:** Auth.js (NextAuth) with email + password and email verification, or Lucia. Email verification is **mandatory before voting** (core anti-fraud control).
-- **Payments:** Stripe (Checkout for bundles, webhooks to credit accounts). EU VAT handling via Stripe Tax.
-- **Hosting:** Self-hosted on Hetzner via Docker Compose (app + Postgres + Redis + reverse proxy with automatic TLS).
-- **SEO:** Public pages are statically generated / ISR where possible, with full metadata, Open Graph images, structured data, and a sitemap.
+- **Framework:** Next.js (App Router, TypeScript, Server Components by default; Client Components only where interactive).
+- **DB:** PostgreSQL with **Drizzle** ORM (type-safe + transparent SQL).
+- **Cache / real-time / rate-limit:** Redis (counters, leaderboards via sorted sets, rate limiting, free-vote-per-day locks, job queue).
+- **UI:** shadcn/ui + Tailwind.
+- **Auth:** Auth.js (NextAuth) or Lucia, email + password, **email verification mandatory before voting** (core anti-fraud control).
+- **Payments:** Stripe — **only for contestant subscriptions.** No vote or boost purchases exist.
+- **Ads:** Google AdSense (or equivalent) ad slots on public pages.
+- **Hosting:** Self-hosted on Hetzner via Docker Compose (app + Postgres + Redis + reverse proxy with automatic TLS + worker).
+- **SEO:** Public pages SSG/ISR with full metadata, OG images, structured data, sitemap.
 
-**Code conventions for Claude Code:** strict TypeScript, server actions or route handlers for mutations, Zod for input validation on every mutation, no secrets in client code, all money stored as integer cents, all vote scoring computed server-side only.
+**Conventions:** strict TypeScript, Zod validation on every mutation, no secrets client-side, money stored as integer cents, **all vote scoring computed server-side only.**
 
 ---
 
 ## 2. MVP Scope
 
 **In scope (v1):**
-1. Auth + email verification (voters and couples).
-2. Couple registration + public profile with story, photos/videos.
-3. One monthly, country-level competition with a qualification (knockout) phase.
-4. Voting engine: free daily vote, paid votes, 5× boosts.
-5. Stripe payments for vote bundles and the purchasable boost.
-6. Live leaderboard.
-7. Daily couple posts.
-8. Public SEO pages (couple profiles, competition page, leaderboard, landing).
-9. Admin: moderation queue, content takedown, competition setup, prize config, manual winner payout.
-10. Basic anti-fraud controls.
+1. **Category-aware engine** — a `verticals` config powering the launch vertical (Pets) with Dogs and Cats competitions; couples/cars/gardens addable later by config.
+2. Auth + email verification (voters and contestant owners).
+3. Contestant registration + public profile with story, photos/videos.
+4. One country, monthly competitions (Dogs, Cats) with a qualification (knockout) phase.
+5. Voting engine: **free daily vote** + **one free 5x boost per contestant per competition**.
+6. Contestant subscriptions via Stripe (outcome-neutral perks).
+7. Sponsor logo/ad listings (admin-managed) + AdSense slots.
+8. Live leaderboard (per competition).
+9. Contestant posts (daily; volume may be a subscription perk).
+10. Public SEO pages incl. permanent evergreen story pages.
+11. Admin: moderation, competition setup, prize config, sponsor management, winner/prize fulfilment.
+12. Anti-fraud controls.
 
-**Out of scope (v1) — design for, don't build:**
-- Regional/continental/global tiers and auto-advancement.
-- In-app native mobile apps.
-- Automated payouts (manual for v1).
-- Multi-country / multi-currency (single country, EUR only).
-- Display advertising network (sponsor logo listings can be a simple admin-managed banner).
+**Out of scope (v1) — design for, don't build:** higher tiers + auto-advancement; the Cars/Gardens/Couples verticals (engine supports them, but prove pets first); native mobile apps; cash payouts/payout rails; multi-country/multi-currency; any paid-vote or paid-boost feature (intentionally excluded, not deferred).
 
 ---
 
 ## 3. Data Model (Postgres)
 
-Core tables (column lists illustrative, not exhaustive):
-
 ```
+verticals
+  id, key (pets_dog | pets_cat | car | garden | couple | ...),
+  display_name, contestant_noun (e.g. "dog", "car", "couple"),
+  active (bool), config_json
+  -- a vertical is configuration; launch with pets_dog + pets_cat
+
 users
   id, email (unique), password_hash, email_verified_at,
-  display_name, role (voter | couple_owner | admin),
+  display_name, role (voter | contestant_owner | admin),
   created_at, last_login_at, status (active | suspended)
 
-couples
-  id, owner_user_id (fk users), slug (unique, for SEO URL),
-  title (e.g. "Anna & Marco"), bio, country_code,
-  cover_media_id, status (active | hidden | banned),
+contestants
+  id, owner_user_id (fk), vertical_id (fk), slug (unique, SEO URL),
+  title, bio, country_code, cover_media_id,
+  subscription_tier (none | premium), status (active | hidden | banned),
   created_at
+  -- "contestant" is the generic entity: a dog, cat, car, garden, or couple
 
 media
-  id, couple_id (fk), url, type (image | video),
+  id, contestant_id (fk), url, type (image | video),
   width, height, moderation_status (pending | approved | rejected)
 
 competitions
-  id, level (country | regional | continental | global),  -- only "country" used in v1
+  id, vertical_id (fk), level (country | regional | continental | global),  -- only "country" in v1
   country_code, title, period_start, period_end,
-  qualification_start, qualification_end,
-  qualification_min_votes,                    -- knockout threshold
-  prize_cents, prize_currency,                -- fixed, pre-announced
-  prize_tiers_json,                           -- optional growing-prize milestones
-  leaderboard_mode (weighted_votes | unique_voters),  -- see §5 decision
+  qualification_start, qualification_end, qualification_min_votes,
+  prize_description, prize_type (sponsor_inkind | giftcard | travel | cash),
+  prize_value_cents, prize_funder (sponsor | company),
+  prize_tiers_json,                       -- company-set growing-prize milestones
   status (draft | qualification | active | ended), created_at
 
 competition_entries
-  id, competition_id (fk), couple_id (fk),
+  id, competition_id (fk), contestant_id (fk),
   status (qualifying | qualified | eliminated | winner),
-  qualified_at, auto_advanced (bool),         -- for future top-10 advancement
-  unique(competition_id, couple_id)
+  qualified_at, qualify_path (referral | votes | founder | auto_advance),
+  unique(competition_id, contestant_id)
 
 votes
   id, competition_entry_id (fk), voter_user_id (fk),
-  source (free_daily | paid),
-  weight (int),                               -- 1 normally, ×5 during boost
-  boost_applied (bool),
-  created_at
+  weight (int),                           -- 1 normally, 5 during the entry's free boost window
+  boost_applied (bool), created_at
   index(competition_entry_id), index(voter_user_id, created_at)
-
-vote_credits
-  user_id (fk), balance (int)                 -- purchased, unspent votes
+  -- all votes are free; no "source" payment distinction needed
 
 boosts
-  id, competition_entry_id (fk),
-  type (free | paid), multiplier (default 5),
+  id, competition_entry_id (fk), multiplier (default 5),
   window_start, window_end (24h), created_at
-  -- one free + max one paid per entry per competition (enforced in app)
+  -- exactly ONE free boost per entry per competition, contestant-activated
+
+subscriptions
+  id, contestant_id (fk), stripe_subscription_id,
+  status (active | canceled | past_due),
+  current_period_end, created_at
 
 transactions
-  id, user_id (fk), kind (vote_bundle | boost),
-  amount_cents, currency, stripe_payment_intent,
-  status (pending | succeeded | refunded),
-  metadata_json, created_at
+  id, contestant_id (fk), kind (subscription),
+  amount_cents, currency, stripe_invoice, status, created_at
+  -- subscriptions are the only paid product
+
+referrals
+  id, referrer_contestant_id (fk), referred_contestant_id (fk),
+  competition_id (fk), counted (bool), created_at
+  -- counts only once referred contestant is verified + profile complete
 
 posts
-  id, couple_id (fk), competition_id (nullable fk),
+  id, contestant_id (fk), competition_id (nullable fk),
   text, media_id (nullable), created_at
-  -- enforce max 1 per couple per day in app
+  -- daily cap; higher for premium subscribers
 
 sponsors
-  id, name, logo_media_id, link_url,
-  competition_id (nullable), placement (banner | logo_strip),
+  id, name, logo_media_id, link_url, competition_id (nullable),
+  placement (banner | logo_strip), funds_prize (bool),
   active_from, active_to
 
 moderation_reports
-  id, target_type (couple | post | media | user),
-  target_id, reporter_user_id (nullable), reason,
-  status (open | actioned | dismissed), created_at, resolved_by
+  id, target_type, target_id, reporter_user_id (nullable),
+  reason, status (open | actioned | dismissed), created_at, resolved_by
 
-payouts
-  id, competition_id (fk), couple_id (fk),
-  amount_cents, status (pending | identity_verified | paid),
-  method, notes, created_at, paid_at
+prize_fulfilments
+  id, competition_id (fk), contestant_id (fk),
+  type (sponsor_inkind | giftcard | travel | cash),
+  status (pending | identity_verified | delivered),
+  details, created_at, delivered_at
+
+story_pages
+  id, contestant_id (fk), slug (unique, permanent/canonical),
+  competition_id (fk),                    -- the round it graduated from
+  narrative (text, real story), published_at, updated_at
+  -- created when a competition ends; URL never changes so link equity accumulates
 ```
 
 ---
 
 ## 4. Redis Usage
 
-- **Free-vote lock:** key `freevote:{userId}:{competitionId}:{YYYY-MM-DD}` with TTL until end of day. Set on cast; existence blocks a second free vote that day.
-- **Leaderboard:** sorted set `lb:{competitionId}`, member = `entryId`, score = total weighted votes. Increment on each vote; Postgres remains source of truth and is reconciled by a periodic job.
-- **Rate limiting:** sliding-window counters per IP and per user on vote/auth/post endpoints.
-- **Job queue:** BullMQ for async work (sending verification emails, OG image generation, leaderboard reconciliation, boost-window expiry).
-- **Hot caches:** competition metadata, public profile data (short TTL, invalidate on edit).
+- **Free-vote lock:** `freevote:{userId}:{competitionId}:{YYYY-MM-DD}`, TTL to end of day. Blocks a second free vote that day.
+- **Leaderboard:** sorted set `lb:{competitionId}`, member `entryId`, score = total weighted votes. Postgres is source of truth; periodic reconciliation job.
+- **Rate limiting:** per-IP and per-user sliding windows on vote/auth/post endpoints.
+- **Job queue:** BullMQ (verification emails, OG image generation, leaderboard reconciliation, boost-window expiry, referral validation).
+- **Hot caches:** competition + public profile data, short TTL, invalidate on edit.
 
 ---
 
-## 5. Voting Engine (the core — get this right)
+## 5. Voting Engine (the core)
 
 **Rules**
-- A verified voter gets **one free vote per competition per day** (enforced via the Redis day-lock + a `votes` row with `source=free_daily`).
-- A voter may cast **paid votes** by spending `vote_credits` (1 credit = 1 vote). Bundles purchased via Stripe top up the balance.
-- Each casting writes a `votes` row with a computed `weight`.
-- **Boost multiplier:** if the receiving entry has an active boost window at cast time, `weight = base_weight × 5` and `boost_applied = true`. Applies to both free and paid votes received during the window. ("5× all the votes they receive.")
-- **Couples cannot vote.** A `couple_owner` cannot cast votes; block at the action level.
-- All scoring is computed **server-side**; never trust a client-sent weight.
-
-**Boosts**
-- Each entry gets **one free 24h 5× window** per competition (couple chooses when to start it).
-- Each entry may **purchase one additional 24h 5× window** per competition (Stripe). Price scales by competition level (config field; single price in v1).
+- A verified voter gets **one free vote per competition per day** (Redis day-lock + `votes` row).
+- **There are no paid votes.** Voters never pay; no vote credits exist.
+- **Free boost:** each entry has **one free 24h 5x window per competition**, activated by the contestant owner at a time of their choosing. While active, votes that entry receives are recorded with `weight = 5`, else `weight = 1`.
+- **Ranking** = sum of vote weights per entry (`lb:{competitionId}`). Since no money touches votes, there is no pay-to-win surface and no need for a separate "unique voters vs paid" mode — ranking is simply total weighted free votes.
+- **Contestant owners cannot vote.** Block at the action level.
+- All scoring server-side; never trust client-sent weight.
 
 **Qualification (knockout)**
-- Any couple may enter; entry starts as `qualifying`.
-- During `qualification_start → qualification_end` (e.g. 14 days) the entry must reach `qualification_min_votes` to flip to `qualified`.
-- Entries not qualified by the deadline → `eliminated`.
-- `auto_advanced` entries (future: top 10 of prior tier) skip qualification — stub the field now, no logic needed in v1.
-
-**Leaderboard mode (decision flag — set per competition)**
-- `weighted_votes` — score = sum of vote weights (your stated model; paid votes and boosts move the ranking).
-- `unique_voters` — score = count of distinct verified voters; paid votes fund/grow the prize but do **not** move the ranking.
-- Implement both behind `competitions.leaderboard_mode`. **Recommended default: `unique_voters`** — it removes the pay-to-win dynamic and the strongest incentive for couples to buy votes through proxy accounts, while paid votes still drive revenue and the prize. Flip to `weighted_votes` only if you deliberately want spending to decide the winner.
+- Entry starts `qualifying`. A contestant qualifies via one of: **referral** (refer one verified, profile-complete contestant), **votes** (reach `qualification_min_votes` in the window), or **founder** (first launch cohort only, capped). `auto_advance` reserved for future top-10 tiers.
+- The live round starts only after the qualification window closes; all qualified contestants enter together.
 
 ---
 
-## 6. Payments (Stripe)
+## 6. Payments & Ads
 
-- **Vote bundles:** Stripe Checkout (e.g. 1 / 10 / 100 votes, lower per-vote price in bigger bundles). On `checkout.session.completed` webhook → increment `vote_credits.balance` inside a transaction, write `transactions` row.
-- **Boost purchase:** Checkout for the single paid boost; webhook creates the `boosts` row and schedules expiry.
-- **Idempotency:** key webhook handling on the Stripe event id; never double-credit.
-- **Money:** integer cents, EUR only in v1, Stripe Tax for VAT.
-- **Payouts:** manual in v1 — admin marks `payouts` paid after identity verification and bank transfer outside the app.
+- **Stripe:** contestant subscriptions only (Checkout + customer portal; webhooks update `subscriptions`). EUR, Stripe Tax for VAT. Idempotent webhook handling keyed on Stripe event id.
+- **No vote/boost purchases anywhere.**
+- **Subscription perks (outcome-neutral by default):** verified badge, profile customization, voter analytics, priority support, cosmetic flair. **Visibility-affecting perks** (more posts/day, improved visibility, social features) are configurable and flagged — keep them off the competition ranking surface; gate behind a config flag pending legal review.
+- **Ads:** AdSense (or equivalent) slots on public pages; admin-managed sponsor logo/banner placements per competition.
+- **Prize fulfilment:** sponsor in-kind, gift card/voucher codes, or travel voucher — recorded in `prize_fulfilments`, delivered after winner identity verification. Cash is out of scope for v1 (would require payout rails).
 
 ---
 
 ## 7. Public / SEO Pages
 
-All public pages SSG/ISR with full metadata. These pages are the growth engine — each couple's page is shareable.
-
-- `/` — landing: current competition, prize, top couples, CTA to vote/compete.
-- `/c/[slug]` — **couple profile** (story, media, posts, vote button, share buttons). Highest-priority SEO page.
-- `/competitions/[id]` — competition page: rules, prize (and growing-prize tiers), leaderboard.
+- `/` — landing: current competition, prize, top contestants, CTA.
+- `/c/[slug]` — contestant profile (story, media, posts, free vote button, share buttons). Top-priority SEO page.
+- `/competitions/[id]` — rules, prize + growing-prize tiers, leaderboard.
 - `/leaderboard/[competitionId]` — live ranking.
-- **SEO requirements:** per-page `metadata` (title, description), Open Graph + Twitter cards, **dynamic OG image** per couple (generated via `@vercel/og` / Satori), `sitemap.xml`, `robots.txt`, JSON-LD structured data (`Person`/`Event` where sensible), canonical URLs, semantic HTML, fast LCP.
-- **Share targets:** prefilled share links for Instagram/Facebook/TikTok/X/WhatsApp on every profile.
+- `/story/[slug]` — **permanent evergreen "love story" page.** When a competition ends, an entry converts into a content-rich story page with a **canonical URL that never changes**, so link equity accumulates across rounds. This is the long-term organic-traffic asset.
+- **SEO:** per-page metadata, OG + Twitter cards, dynamic per-contestant OG images (`@vercel/og`/Satori), `sitemap.xml`, `robots.txt`, JSON-LD, canonical URLs, fast LCP.
+- **Share targets:** prefilled Instagram/Facebook/TikTok/X/WhatsApp links + referral link on every profile.
+
+**Content-quality rule (critical for SEO):** story pages must be **genuinely content-rich**, not templated stubs. Prompt contestant owners to write a real narrative (minimum length / quality nudges), require real media. Mass-generated thin pages get deindexed and become a liability — the value is unique substance per page, not page count. SEO traffic compounds over 12–24 months, so build the fundamentals from day one; do not expect early organic traffic.
 
 ---
 
 ## 8. Admin & Moderation
 
-- Admin-only area (`role = admin`).
-- **Competition management:** create/configure a competition (dates, qualification threshold, fixed prize, growing-prize tiers, leaderboard mode), open/close, declare winner.
-- **Moderation queue:** review reported couples/posts/media; approve/reject media; hide/ban couples; suspend users.
-- **Takedown flow:** one-click hide of a couple or post (important for breakups/disputes) with audit log.
-- **Sponsor management:** add sponsor logos/banners to a competition.
-- **Payout management:** view winners, mark identity verified, mark paid.
-- **Fraud review:** view flagged entries (see §9).
+- Competition management: create/configure (dates, threshold, fixed prize + type + funder, growing-prize tiers), open/close, declare winner.
+- Moderation queue: review reported contestants/posts/media; approve/reject media; hide/ban; suspend. **Required to stay AdSense-eligible**, not only for safety.
+- One-click takedown of a contestant/post (e.g. couples-vertical breakups/disputes) with audit log.
+- Sponsor management: logos/banners, prize-funding flag.
+- Prize fulfilment: verify winner identity, mark delivered.
+- Fraud review queue (see Section 9).
 
 ---
 
 ## 9. Anti-Fraud (build from day one)
 
+Even with no money on votes, fake accounts distort the contest, undermine prize integrity, and threaten AdSense eligibility.
+
 - **Email verification required before any vote.**
-- **One free vote per competition per day**, enforced server-side via Redis lock + DB constraint.
-- **Rate limiting** per IP and per user on vote, signup, login, post endpoints.
-- **Signal logging:** store IP, user-agent, and a device/session fingerprint on votes for later analysis (privacy-compliant; document in privacy policy).
-- **Self-/proxy-voting detection:** background job flags entries whose voters cluster suspiciously (shared IP/device, signup bursts, voting only for one couple). Surface flags in the admin fraud review queue — no automated banning in v1.
-- **`unique_voters` leaderboard mode** is itself the strongest structural anti-fraud measure (buying votes through proxies gains nothing on the ranking).
+- **One free vote per competition per day**, server-enforced (Redis + DB).
+- **Rate limiting** per IP and per user on vote/signup/login/post.
+- **Signal logging:** IP, user-agent, device/session fingerprint on votes (privacy-compliant; disclose in privacy policy).
+- **Referral validation:** a referral counts only after the referred contestant is email-verified with a complete profile (story + at least 1 photo); flag shared device/IP clusters.
+- **Clustering detection:** background job flags entries whose voters cluster suspiciously; surface in admin review (no auto-bans in v1).
 
 ---
 
 ## 10. Deployment (Hetzner, self-hosted)
 
-- **Docker Compose** services: `web` (Next.js, standalone output), `postgres`, `redis`, `proxy` (Caddy or Traefik for automatic Let's Encrypt TLS), `worker` (BullMQ jobs).
-- **Next.js:** `output: "standalone"` for a small production image; multi-stage Dockerfile.
-- **Reverse proxy:** Caddy recommended for zero-config HTTPS; route domain → `web:3000`.
-- **Persistence:** named volumes for Postgres and Redis; mount media to a volume or use Hetzner Object Storage / S3-compatible bucket for uploads (recommended so the app stays stateless).
-- **Backups:** nightly `pg_dump` to object storage; Redis is cache/derivable so lower priority (snapshot optional).
-- **Env/secrets:** `.env` on the server (not committed); document required vars: `DATABASE_URL`, `REDIS_URL`, `NEXTAUTH_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, mail provider keys, `S3_*`.
-- **Migrations:** run on deploy (`drizzle-kit migrate` / `prisma migrate deploy`).
-- **Observability:** structured logs, a basic uptime check, and Sentry (or similar) for errors.
-- **CI/CD:** GitHub Actions → build image → push to registry → SSH deploy / `docker compose pull && up -d` on the Hetzner box.
+- **Docker Compose:** `web` (Next.js standalone), `postgres`, `redis`, `proxy` (Caddy/Traefik, auto Let's Encrypt TLS), `worker` (BullMQ).
+- **Next.js:** `output: "standalone"`, multi-stage Dockerfile.
+- **Storage:** media to Hetzner Object Storage / S3-compatible bucket (keep app stateless).
+- **Backups:** nightly `pg_dump` to object storage; Redis snapshots optional.
+- **Secrets:** server `.env` (not committed): `DATABASE_URL`, `REDIS_URL`, `NEXTAUTH_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, mail keys, `S3_*`, `ADSENSE_*`.
+- **Migrations:** `drizzle-kit migrate` on deploy.
+- **Observability:** structured logs, uptime check, Sentry.
+- **CI/CD:** GitHub Actions -> build image -> registry -> SSH `docker compose pull && up -d`.
 
 ---
 
-## 11. Suggested Build Order (milestones)
+## 11. Suggested Build Order
 
-1. **Foundation** — Next.js + TS + Tailwind + shadcn/ui scaffold, Drizzle + Postgres connection, Redis connection, Docker Compose for local dev.
-2. **Auth** — signup/login, email verification, roles, session handling.
-3. **Couples** — registration, profile editing, media upload (to S3-compatible storage), public profile page `/c/[slug]`.
-4. **Competition + entries** — admin creates a competition; couples enter; qualification phase logic.
-5. **Voting engine** — free daily vote, vote credits, casting, weight computation, Redis leaderboard, both leaderboard modes behind the flag.
-6. **Payments** — Stripe Checkout for bundles + boost, webhooks, credit/boost provisioning.
-7. **Boosts** — free + paid 5× windows, expiry job.
-8. **Posts** — daily couple post (1/day cap).
-9. **Public SEO pages** — landing, competition, leaderboard, OG images, sitemap, structured data.
-10. **Admin & moderation** — queue, takedown, competition controls, payout management.
-11. **Anti-fraud** — rate limiting, signal logging, flagging job.
-12. **Deploy** — Hetzner Docker Compose, TLS, backups, CI/CD.
+1. **Foundation** — Next.js + TS + Tailwind + shadcn/ui, Drizzle + Postgres, Redis, local Docker Compose.
+2. **Auth** — signup/login, email verification, roles.
+3. **Contestants** — registration, profile, media upload to S3, public profile `/c/[slug]`.
+4. **Competition + entries** — admin creates competition; contestants enter; qualification logic (referral + votes + founder).
+5. **Voting engine** — free daily vote, free boost, weight + Redis leaderboard.
+6. **Subscriptions** — Stripe Checkout + portal + webhooks; outcome-neutral perks.
+7. **Posts** — daily post (cap; higher for premium).
+8. **Public SEO pages** — landing, competition, leaderboard, OG images, sitemap, structured data, AdSense slots.
+9. **Admin & moderation** — queue, takedown, competition controls, sponsor + prize fulfilment.
+10. **Anti-fraud** — rate limiting, signal logging, referral validation, clustering job.
+11. **Deploy** — Hetzner Docker Compose, TLS, backups, CI/CD.
 
 ---
 
 ## 12. Non-Goals & Notes
 
-- Prize is a **fixed amount set and announced before each round**, funded from revenue and/or sponsors — never a live percentage of incoming payments. The growing-prize feel is implemented as company-set milestone tiers (`prize_tiers_json`), not a redistribution of user funds.
-- The **free daily vote** is the no-purchase entry route required by many EU promotional-competition rules — keep it always available and never gate it behind payment.
-- This spec is structural/technical, not legal advice. Confirm prize-competition and payment/e-money rules for the launch country before going live, and reflect them in the published competition terms and privacy policy.
+- Prize is a **fixed amount set and announced before each round**, funded by sponsor and/or company — never a percentage of revenue. Growing-prize feel = company-set milestone tiers.
+- **No payment of any kind affects the contest outcome.** This is the central design rule; preserve it through every feature.
+- The **free daily vote** is the no-purchase entry route — always free and ungated.
+- **Visibility-affecting subscription perks** need legal review before being charged for; keep them ranking-neutral or behind a flag until cleared.
+- Structural/technical spec, not legal advice. Confirm prize-competition rules for the launch country, and reflect them in published terms and the privacy policy, before going live.
